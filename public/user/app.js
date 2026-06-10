@@ -1,5 +1,4 @@
-// ⚠️ Render deploy karne ke baad ye URL change karo
-const BACKEND_URL = '';  // Example: 'https://your-app.onrender.com'
+const BACKEND_URL = 'https://manage-chat.onrender.com';
 
 const socket = io(BACKEND_URL || undefined, {
   transports: ['websocket', 'polling']
