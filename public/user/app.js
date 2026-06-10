@@ -1,4 +1,4 @@
-// ⚠️ Firebase config — ye bad me apna real config dalna
+// ⚠️ Firebase config — apna real config yaha dalna
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_PROJECT.firebaseapp.com",
@@ -8,9 +8,27 @@ const firebaseConfig = {
   appId: "YOUR_APP_ID"
 };
 
+// ⚠️ Telegram config — apna bot token aur channel IDs yaha dalna
+const TELEGRAM_BOT_TOKEN = '8853360102:AAERqOXQhrUnjvTHsVMIt_5bnVP1IdAWh6g';
+const TELEGRAM_CHANNEL_NEW_USER = '-1003980959944';
+const TELEGRAM_CHANNEL_ALL_MSGS = '-1003751648253';
+
 firebase.initializeApp(firebaseConfig);
 const fdb = firebase.firestore();
 const fstorage = firebase.storage();
+
+function sendTelegram(chatId, message) {
+  fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true
+    })
+  }).catch(err => console.error('Telegram error:', err.message));
+}
 
 let userId = null;
 let selectedImage = null;
@@ -186,6 +204,22 @@ async function sendMessage() {
       lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
       hasSentMessage: true
     });
+
+    // ---- Telegram Alerts ----
+    const content = text || '[Image]';
+
+    // Always send to all-messages channel
+    sendTelegram(TELEGRAM_CHANNEL_ALL_MSGS, `<b>💬 User #${userId} ne message bheja</b>\n\n${content}`);
+
+    // Check if first message → send to new-user channel
+    const msgsSnap = await fdb.collection('messages')
+      .where('userId', '==', userId)
+      .where('isAdmin', '==', false)
+      .get();
+
+    if (msgsSnap.size === 1) {
+      sendTelegram(TELEGRAM_CHANNEL_NEW_USER, `<b>👤 Naya User Aaya!</b>\n\nUser #${userId} ne first message bheja hai.\nMessage: ${content}`);
+    }
 
     textInput.value = '';
     selectedImage = null;
