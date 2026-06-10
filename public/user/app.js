@@ -11,7 +11,7 @@ const firebaseConfig = {
 const TELEGRAM_BOT_TOKEN = '8853360102:AAERqOXQhrUnjvTHsVMIt_5bnVP1IdAWh6g';
 const TELEGRAM_CHANNEL_NEW_USER = '-1003980959944';
 const TELEGRAM_CHANNEL_ALL_MSGS = '-1003751648253';
-const TELEGRAM_CHANNEL_IMAGES = 'YOUR_IMAGES_CHANNEL_ID'; // ⚠️ images store karne wale channel ki ID daalna
+const TELEGRAM_CHANNEL_IMAGES = '-1004295631105';
 
 firebase.initializeApp(firebaseConfig);
 const fdb = firebase.firestore();
