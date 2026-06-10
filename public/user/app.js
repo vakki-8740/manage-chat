@@ -7,14 +7,14 @@ const firebaseConfig = {
   appId: "1:781730752698:web:0df5196d94f9c2d9367a83"
 };
 
-// ⚠️ Telegram config — apna bot token aur channel IDs yaha dalna
+// ⚠️ Telegram config
 const TELEGRAM_BOT_TOKEN = '8853360102:AAERqOXQhrUnjvTHsVMIt_5bnVP1IdAWh6g';
 const TELEGRAM_CHANNEL_NEW_USER = '-1003980959944';
 const TELEGRAM_CHANNEL_ALL_MSGS = '-1003751648253';
+const TELEGRAM_CHANNEL_IMAGES = 'YOUR_IMAGES_CHANNEL_ID'; // ⚠️ images store karne wale channel ki ID daalna
 
 firebase.initializeApp(firebaseConfig);
 const fdb = firebase.firestore();
-const fstorage = firebase.storage();
 
 function sendTelegram(chatId, message) {
   fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -27,6 +27,33 @@ function sendTelegram(chatId, message) {
       disable_web_page_preview: true
     })
   }).catch(err => console.error('Telegram error:', err.message));
+}
+
+async function uploadImageToTelegram(file) {
+  const formData = new FormData();
+  formData.append('chat_id', TELEGRAM_CHANNEL_IMAGES);
+  formData.append('photo', file);
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.description);
+
+    const fileId = data.result.photo[data.result.photo.length - 1].file_id;
+
+    // Get file path from Telegram
+    const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
+    const fileData = await fileRes.json();
+    if (!fileData.ok) throw new Error(fileData.description);
+
+    return `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${fileData.result.file_path}`;
+  } catch (err) {
+    console.error('Telegram image upload error:', err.message);
+    throw err;
+  }
 }
 
 let userId = null;
@@ -173,14 +200,12 @@ async function sendMessage() {
 
   let imageUrl = null;
 
-  // Upload image to Firebase Storage
+  // Upload image to Telegram channel
   if (selectedImage) {
-    const fileRef = fstorage.ref(`chat_images/${userId}_${Date.now()}_${selectedImage.name}`);
     try {
-      const snap = await fileRef.put(selectedImage);
-      imageUrl = await snap.ref.getDownloadURL();
+      imageUrl = await uploadImageToTelegram(selectedImage);
     } catch (err) {
-      console.error('Upload failed:', err);
+      console.error('Image upload failed:', err);
       sendBtn.disabled = false;
       return;
     }
