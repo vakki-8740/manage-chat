@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Support Chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --ios-blue: #007AFF;
+      --ios-gray: #E9E9EB;
+      --ios-dark-gray: #8E8E93;
+      --ios-bg: #F2F2F7;
+      --ios-text: #1C1C1E;
+      --ios-subtext: #8E8E93;
+      --ios-separator: #C6C6C8;
+      --safe-top: env(safe-area-inset-top, 20px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: var(--ios-bg);
+      color: var(--ios-text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* iOS Navigation Bar */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding-top: var(--safe-top);
+      background: rgba(249, 249, 249, 0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 0.5px solid var(--ios-separator);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 44px;
+      padding: 0 16px;
+      position: relative;
+    }
+
+    .nav-title {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    /* Connection Status */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 24px;
+      font-size: 11px;
+      color: var(--ios-subtext);
+      background: rgba(249, 249, 249, 0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .status-dot.online {
+      background: #34C759;
+    }
+
+    .status-dot.offline {
+      background: var(--ios-dark-gray);
+    }
+
+    /* Chat Messages */
+    .chat-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding-top: calc(var(--safe-top) + 68px);
+      padding-bottom: calc(var(--safe-bottom) + 72px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .messages {
+      display: flex;
+      flex-direction: column;
+      padding: 12px 16px;
+      gap: 6px;
+    }
+
+    .message {
+      max-width: 78%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 16px;
+      line-height: 1.4;
+      word-wrap: break-word;
+      animation: messageIn 0.3s ease-out;
+      position: relative;
+    }
+
+    @keyframes messageIn {
+      from {
+        opacity: 0;
+        transform: scale(0.92) translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: var(--ios-blue);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.admin {
+      align-self: flex-start;
+      background: #E8E8EC;
+      color: var(--ios-text);
+      border-bottom-left-radius: 4px;
+    }
+
+    .message img {
+      max-width: 100%;
+      border-radius: 12px;
+      display: block;
+      margin: -2px 0;
+    }
+
+    .message .time {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 4px;
+      display: block;
+      text-align: right;
+    }
+
+    .message.admin .time {
+      color: var(--ios-subtext);
+      opacity: 1;
+    }
+
+    .message.user .time {
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    /* System message (date separator) */
+    .system-msg {
+      text-align: center;
+      font-size: 12px;
+      color: var(--ios-subtext);
+      margin: 16px 0 8px;
+    }
+
+    .system-msg span {
+      background: var(--ios-bg);
+      padding: 4px 12px;
+      border-radius: 10px;
+    }
+
+    /* Typing indicator */
+    .typing {
+      align-self: flex-start;
+      background: #E8E8EC;
+      border-radius: 18px;
+      border-bottom-left-radius: 4px;
+      padding: 12px 18px;
+      display: none;
+      gap: 4px;
+    }
+
+    .typing.active {
+      display: flex;
+    }
+
+    .typing span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ios-dark-gray);
+      animation: typing 1.4s infinite ease-in-out;
+    }
+
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typing {
+      0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+      30% { opacity: 1; transform: translateY(-4px); }
+    }
+
+    /* Input Bar */
+    .input-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding-bottom: var(--safe-bottom);
+      background: rgba(249, 249, 249, 0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-top: 0.5px solid var(--ios-separator);
+    }
+
+    .input-inner {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 8px 12px;
+      min-height: 52px;
+    }
+
+    .attach-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: transparent;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      color: var(--ios-blue);
+      font-size: 20px;
+      transition: background 0.2s;
+    }
+
+    .attach-btn:active {
+      background: rgba(0, 122, 255, 0.1);
+    }
+
+    .text-input {
+      flex: 1;
+      border: none;
+      border-radius: 20px;
+      background: var(--ios-bg);
+      padding: 10px 16px;
+      font-size: 16px;
+      font-family: inherit;
+      color: var(--ios-text);
+      outline: none;
+      max-height: 100px;
+      resize: none;
+      line-height: 1.4;
+    }
+
+    .text-input::placeholder {
+      color: var(--ios-subtext);
+    }
+
+    .send-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: var(--ios-blue);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      color: white;
+      font-size: 16px;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+
+    .send-btn:active {
+      opacity: 0.7;
+      transform: scale(0.92);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* Image preview in input */
+    .image-preview {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px 0;
+    }
+
+    .image-preview.active {
+      display: flex;
+    }
+
+    .image-preview img {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+
+    .image-preview .remove-img {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--ios-dark-gray);
+      color: white;
+      border: none;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Welcome message */
+    .welcome {
+      text-align: center;
+      padding: 40px 20px 20px;
+      color: var(--ios-subtext);
+    }
+
+    .welcome h3 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--ios-text);
+      margin-bottom: 6px;
+    }
+
+    .welcome p {
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Scrollbar */
+    .chat-container::-webkit-scrollbar {
+      width: 4px;
+    }
+    .chat-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .chat-container::-webkit-scrollbar-thumb {
+      background: var(--ios-separator);
+      border-radius: 4px;
+    }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      text-align: center;
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .empty-state h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      color: var(--ios-subtext);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <div class="nav">
+    <div class="status-bar">
+      <span class="status-dot offline" id="statusDot"></span>
+      <span id="statusText">Connecting...</span>
+    </div>
+    <div class="nav-inner">
+      <span class="nav-title">Support Chat</span>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="chat-container" id="chatContainer">
+    <div class="messages" id="messagesContainer">
+      <div class="empty-state">
+        <div class="icon">💬</div>
+        <h3>Welcome to Support</h3>
+        <p>Hi there! 👋 How can we help you today?<br>Send a message and our team will assist you.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input Bar -->
+  <div class="input-bar">
+    <div class="image-preview" id="imagePreview">
+      <img id="previewImg" src="" alt="preview">
+      <button class="remove-img" id="removeImg">✕</button>
+    </div>
+    <div class="input-inner">
+      <button class="attach-btn" id="attachBtn">📎</button>
+      <input type="file" id="fileInput" accept="image/*" style="display:none">
+      <textarea class="text-input" id="textInput" placeholder="Message..." rows="1"></textarea>
+      <button class="send-btn" id="sendBtn" disabled>↑</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

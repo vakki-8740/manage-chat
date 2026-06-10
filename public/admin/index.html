@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Admin - Support Chat</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --ios-blue: #007AFF;
+      --ios-red: #FF3B30;
+      --ios-green: #34C759;
+      --ios-gray: #E9E9EB;
+      --ios-dark-gray: #8E8E93;
+      --ios-bg: #F2F2F7;
+      --ios-text: #1C1C1E;
+      --ios-subtext: #8E8E93;
+      --ios-separator: #C6C6C8;
+      --ios-grouped-bg: #FFFFFF;
+      --safe-top: env(safe-area-inset-top, 20px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: var(--ios-bg);
+      color: var(--ios-text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ==================== NAV ==================== */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding-top: var(--safe-top);
+      background: rgba(249, 249, 249, 0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 0.5px solid var(--ios-separator);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      height: 44px;
+      padding: 0 16px;
+      position: relative;
+    }
+
+    .nav-back {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--ios-blue);
+      font-size: 17px;
+      cursor: pointer;
+      padding: 4px 8px 4px 0;
+      font-family: inherit;
+      flex-shrink: 0;
+    }
+
+    .nav-back.show {
+      display: block;
+    }
+
+    .nav-title {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      flex: 1;
+      text-align: center;
+    }
+
+    .nav-right {
+      font-size: 15px;
+      color: var(--ios-subtext);
+      flex-shrink: 0;
+    }
+
+    /* ==================== SPLIT VIEW ==================== */
+    .app-container {
+      display: flex;
+      height: 100%;
+      padding-top: calc(var(--safe-top) + 44px);
+    }
+
+    /* ==================== USER LIST ==================== */
+    .user-list-panel {
+      width: 100%;
+      min-width: 0;
+      background: var(--ios-grouped-bg);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .user-list-panel.hidden {
+      display: none;
+    }
+
+    .search-bar {
+      padding: 8px 16px;
+      background: var(--ios-bg);
+    }
+
+    .search-input {
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+      background: #E4E4E8;
+      padding: 9px 14px;
+      font-size: 15px;
+      font-family: inherit;
+      color: var(--ios-text);
+      outline: none;
+    }
+
+    .search-input::placeholder {
+      color: var(--ios-subtext);
+    }
+
+    .list-section-header {
+      padding: 14px 16px 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ios-subtext);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .user-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-bottom: 0.5px solid var(--ios-separator);
+      position: relative;
+    }
+
+    .user-item:active {
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    .user-item.unread {
+      background: rgba(0, 122, 255, 0.04);
+    }
+
+    .user-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--ios-blue);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 600;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .online-indicator {
+      position: absolute;
+      bottom: 1px;
+      right: 1px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2.5px solid white;
+    }
+
+    .online-indicator.online {
+      background: var(--ios-green);
+    }
+
+    .online-indicator.offline {
+      background: var(--ios-dark-gray);
+    }
+
+    .user-info {
+      flex: 1;
+      margin-left: 14px;
+      min-width: 0;
+    }
+
+    .user-name {
+      font-size: 16px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .user-name .badge {
+      font-size: 11px;
+      background: var(--ios-blue);
+      color: white;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    .user-name .badge.new {
+      background: var(--ios-red);
+    }
+
+    .user-preview {
+      font-size: 14px;
+      color: var(--ios-subtext);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-time {
+      font-size: 12px;
+      color: var(--ios-subtext);
+      flex-shrink: 0;
+      align-self: flex-start;
+      margin-left: 8px;
+    }
+
+    .no-users {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--ios-subtext);
+    }
+
+    .no-users .icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    /* ==================== CHAT VIEW ==================== */
+    .chat-panel {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      background: var(--ios-bg);
+      min-width: 0;
+    }
+
+    .chat-panel.show {
+      display: flex;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px 16px;
+    }
+
+    .admin-chat-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .message {
+      max-width: 78%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 16px;
+      line-height: 1.4;
+      word-wrap: break-word;
+    }
+
+    .message.user {
+      align-self: flex-start;
+      background: #E8E8EC;
+      color: var(--ios-text);
+      border-bottom-left-radius: 4px;
+    }
+
+    .message.admin {
+      align-self: flex-end;
+      background: var(--ios-blue);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message img {
+      max-width: 100%;
+      border-radius: 12px;
+      display: block;
+      margin: -2px 0;
+    }
+
+    .message .time {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 4px;
+      display: block;
+      text-align: right;
+    }
+
+    .message.user .time {
+      color: var(--ios-subtext);
+      opacity: 1;
+    }
+
+    .message.admin .time {
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    .no-chat-selected {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--ios-subtext);
+      text-align: center;
+      padding: 40px;
+    }
+
+    .no-chat-selected .icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+    }
+
+    .no-chat-selected h3 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--ios-text);
+      margin-bottom: 4px;
+    }
+
+    .no-chat-selected p {
+      font-size: 15px;
+    }
+
+    .chat-empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--ios-subtext);
+      font-size: 14px;
+    }
+
+    /* ==================== ADMIN INPUT ==================== */
+    .input-bar {
+      border-top: 0.5px solid var(--ios-separator);
+      background: rgba(249, 249, 249, 0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      padding-bottom: var(--safe-bottom);
+    }
+
+    .input-inner {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 8px 12px;
+      min-height: 52px;
+    }
+
+    .admin-text-input {
+      flex: 1;
+      border: none;
+      border-radius: 20px;
+      background: var(--ios-bg);
+      padding: 10px 16px;
+      font-size: 16px;
+      font-family: inherit;
+      color: var(--ios-text);
+      outline: none;
+      max-height: 100px;
+      resize: none;
+      line-height: 1.4;
+    }
+
+    .admin-text-input::placeholder {
+      color: var(--ios-subtext);
+    }
+
+    .admin-send-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: var(--ios-blue);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      color: white;
+      font-size: 16px;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+
+    .admin-send-btn:active {
+      opacity: 0.7;
+      transform: scale(0.92);
+    }
+
+    .admin-send-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* ==================== SCROLLBAR ==================== */
+    .user-list-panel::-webkit-scrollbar,
+    .chat-messages::-webkit-scrollbar {
+      width: 4px;
+    }
+    .user-list-panel::-webkit-scrollbar-track,
+    .chat-messages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .user-list-panel::-webkit-scrollbar-thumb,
+    .chat-messages::-webkit-scrollbar-thumb {
+      background: var(--ios-separator);
+      border-radius: 4px;
+    }
+
+    /* ==================== RESPONSIVE ==================== */
+    @media (min-width: 768px) {
+      .user-list-panel {
+        width: 340px;
+        border-right: 0.5px solid var(--ios-separator);
+      }
+
+      .user-list-panel.hidden {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .chat-panel {
+        display: flex;
+      }
+
+      .nav-back {
+        display: none !important;
+      }
+    }
+
+    @media (max-width: 767px) {
+      .user-list-panel.hidden {
+        display: none;
+      }
+
+      .chat-panel.show {
+        display: flex;
+      }
+
+      .chat-panel:not(.show) {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <div class="nav">
+    <div class="nav-inner">
+      <button class="nav-back" id="backBtn">← Users</button>
+      <span class="nav-title" id="navTitle">Users</span>
+      <span class="nav-right" id="navRight"></span>
+    </div>
+  </div>
+
+  <!-- App Container -->
+  <div class="app-container">
+    <!-- User List -->
+    <div class="user-list-panel" id="userListPanel">
+      <div class="search-bar">
+        <input class="search-input" id="searchInput" type="text" placeholder="Search users...">
+      </div>
+      <div class="list-section-header" id="sectionHeader">All Users</div>
+      <div id="userList"></div>
+    </div>
+
+    <!-- Chat Panel -->
+    <div class="chat-panel" id="chatPanel">
+      <div class="chat-messages" id="chatMessages">
+        <div class="no-chat-selected" id="noChatSelected">
+          <div class="icon">💬</div>
+          <h3>Select a User</h3>
+          <p>Choose a user from the list to view their chat</p>
+        </div>
+        <div class="admin-chat-container" id="adminChatContainer" style="display:none"></div>
+      </div>
+
+      <!-- Input -->
+      <div class="input-bar" id="inputBar" style="display:none">
+        <div class="input-inner">
+          <textarea class="admin-text-input" id="adminTextInput" placeholder="Reply as Support..." rows="1"></textarea>
+          <button class="admin-send-btn" id="adminSendBtn" disabled>↑</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
