@@ -1,20 +1,20 @@
-const BACKEND_URL = 'https://manage-chat.onrender.com';
+// ⚠️ Firebase config — ye bad me apna real config dalna
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
 
-const socket = io(BACKEND_URL || undefined, {
-  transports: ['websocket', 'polling']
-});
-let userId = localStorage.getItem('chat_userId');
+firebase.initializeApp(firebaseConfig);
+const fdb = firebase.firestore();
+const fstorage = firebase.storage();
+
+let userId = null;
 let selectedImage = null;
-
-function api(path) {
-  return BACKEND_URL + path;
-}
-
-function assetUrl(url) {
-  if (!url) return url;
-  if (url.startsWith('http')) return url;
-  return BACKEND_URL + url;
-}
+let unsubscribeMsgs = null;
 
 // DOM refs
 const messagesEl = document.getElementById('messagesContainer');
@@ -31,91 +31,113 @@ const statusText = document.getElementById('statusText');
 
 // ====================== INIT ======================
 async function init() {
-  if (!userId) {
-    try {
-      const res = await fetch(api('/api/user/new'), { method: 'POST' });
-      const data = await res.json();
-      userId = data.id;
-      localStorage.setItem('chat_userId', userId);
-    } catch (err) {
-      console.error('Failed to create user:', err);
-      statusText.textContent = 'Connection error';
-      return;
-    }
-  }
-
-  socket.emit('user:online', userId);
-  loadMessages();
-}
-
-// ====================== LOAD MESSAGES ======================
-async function loadMessages() {
-  try {
-    const res = await fetch(api(`/api/messages/${userId}`));
-    const messages = await res.json();
-    renderMessages(messages);
-  } catch (err) {
-    console.error('Failed to load messages:', err);
-  }
-}
-
-function renderMessages(messages) {
-  messagesEl.innerHTML = '';
-
-  if (!messages || messages.length === 0) {
-    messagesEl.innerHTML = `
-      <div class="empty-state">
-        <div class="icon">💬</div>
-        <h3>Welcome to Support</h3>
-        <p>Hi there! 👋 How can we help you today?<br>Send a message and our team will assist you.</p>
-      </div>
-    `;
+  const storedId = localStorage.getItem('chat_userId');
+  if (storedId) {
+    userId = parseInt(storedId);
+    goOnline();
+    subscribeMessages();
     return;
   }
 
-  messages.forEach(msg => addMessageToUI(msg, false));
-  scrollToBottom();
+  try {
+    // Atomic counter se naya user ID lo
+    const userRef = await fdb.collection('counters').doc('users').get();
+    let nextId = 1;
+    if (userRef.exists) {
+      nextId = userRef.data().current + 1;
+    }
+    await fdb.collection('counters').doc('users').set({ current: nextId });
+
+    // User doc banao
+    await fdb.collection('users').doc(nextId.toString()).set({
+      userId: nextId,
+      online: true,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      hasSentMessage: false,
+      lastMessage: '',
+      lastMessageAt: null
+    });
+
+    userId = nextId;
+    localStorage.setItem('chat_userId', userId);
+    subscribeMessages();
+  } catch (err) {
+    console.error('Failed to create user:', err);
+    statusText.textContent = 'Connection error';
+  }
 }
 
-function addMessageToUI(msg, animate = true) {
-  // Remove empty state if present
-  const emptyState = messagesEl.querySelector('.empty-state');
-  if (emptyState) emptyState.remove();
+function goOnline() {
+  if (!userId) return;
+  fdb.collection('users').doc(userId.toString()).update({ online: true });
+}
 
+function goOffline() {
+  if (!userId) return;
+  fdb.collection('users').doc(userId.toString()).update({ online: false });
+}
+
+// ====================== SUBSCRIBE MESSAGES ======================
+function subscribeMessages() {
+  if (unsubscribeMsgs) unsubscribeMsgs();
+
+  unsubscribeMsgs = fdb.collection('messages')
+    .where('userId', '==', userId)
+    .orderBy('createdAt', 'asc')
+    .onSnapshot((snapshot) => {
+      messagesEl.innerHTML = '';
+      let hasMsgs = false;
+
+      snapshot.forEach((doc) => {
+        hasMsgs = true;
+        addMessageToUI({ id: doc.id, ...doc.data() }, false);
+      });
+
+      if (!hasMsgs) {
+        messagesEl.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">💬</div>
+            <h3>Welcome to Support</h3>
+            <p>Hi there! 👋 How can we help you today?<br>Send a message and our team will assist you.</p>
+          </div>
+        `;
+      }
+
+      scrollToBottom();
+    }, (err) => {
+      console.error('Messages error:', err);
+    });
+}
+
+// ====================== RENDER MESSAGE ======================
+function addMessageToUI(msg, animate = true) {
   const div = document.createElement('div');
-  div.className = `message ${msg.is_admin ? 'admin' : 'user'}`;
+  div.className = `message ${msg.isAdmin ? 'admin' : 'user'}`;
   if (!animate) div.style.animation = 'none';
 
   let content = '';
-    if (msg.image_url) {
-    content += `<img src="${assetUrl(msg.image_url)}" alt="image" loading="lazy">`;
+  if (msg.imageUrl) {
+    content += `<img src="${msg.imageUrl}" alt="image" loading="lazy">`;
   }
-  if (msg.message) {
-    content += msg.message;
+  if (msg.text) {
+    content += msg.text;
   }
 
-  const time = msg.created_at ? formatTime(msg.created_at) : '';
+  const time = msg.createdAt ? formatTime(msg.createdAt.toDate()) : '';
   div.innerHTML = `${content}<span class="time">${time}</span>`;
   messagesEl.appendChild(div);
-
-  if (!animate) {
-    div.style.animation = 'none';
-  }
-
-  scrollToBottom();
 }
 
-function formatTime(dateStr) {
+function formatTime(date) {
   try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    let hours = d.getHours();
-    const mins = d.getMinutes().toString().padStart(2, '0');
+    if (!date || !(date instanceof Date)) return '';
+    let hours = date.getHours();
+    const mins = date.getMinutes().toString().padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12 || 12;
     return `${hours}:${mins} ${ampm}`;
   } catch {
-    return dateStr;
+    return '';
   }
 }
 
@@ -134,14 +156,12 @@ async function sendMessage() {
 
   let imageUrl = null;
 
-  // Upload image if selected
+  // Upload image to Firebase Storage
   if (selectedImage) {
-    const formData = new FormData();
-    formData.append('image', selectedImage);
+    const fileRef = fstorage.ref(`chat_images/${userId}_${Date.now()}_${selectedImage.name}`);
     try {
-      const uploadRes = await fetch(api('/api/upload'), { method: 'POST', body: formData });
-      const uploadData = await uploadRes.json();
-      imageUrl = uploadData.url;
+      const snap = await fileRef.put(selectedImage);
+      imageUrl = await snap.ref.getDownloadURL();
     } catch (err) {
       console.error('Upload failed:', err);
       sendBtn.disabled = false;
@@ -149,16 +169,22 @@ async function sendMessage() {
     }
   }
 
+  const msgData = {
+    userId: userId,
+    text: text || null,
+    imageUrl: imageUrl,
+    isAdmin: false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
   try {
-    await fetch(api('/api/message'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: parseInt(userId),
-        message: text || null,
-        imageUrl,
-        isAdmin: false,
-      }),
+    const msgRef = await fdb.collection('messages').add(msgData);
+
+    // Update user's last message
+    await fdb.collection('users').doc(userId.toString()).update({
+      lastMessage: text || '[Image]',
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+      hasSentMessage: true
     });
 
     textInput.value = '';
@@ -169,38 +195,6 @@ async function sendMessage() {
   } catch (err) {
     console.error('Send failed:', err);
     sendBtn.disabled = false;
-  }
-}
-
-// ====================== SOCKET EVENTS ======================
-socket.on('message:new', (msg) => {
-  if (msg.user_id === parseInt(userId)) {
-    addMessageToUI(msg, true);
-  }
-});
-
-socket.on('user:status', (data) => {
-  // This user panel only shows admin/agent status
-  // We'll show a simulated "online" status for the support team
-  updateConnectionStatus(true);
-});
-
-socket.on('connect', () => {
-  updateConnectionStatus(true);
-  if (userId) socket.emit('user:online', userId);
-});
-
-socket.on('disconnect', () => {
-  updateConnectionStatus(false);
-});
-
-function updateConnectionStatus(online) {
-  if (online) {
-    statusDot.className = 'status-dot online';
-    statusText.textContent = 'Support Team Online';
-  } else {
-    statusDot.className = 'status-dot offline';
-    statusText.textContent = 'Reconnecting...';
   }
 }
 
@@ -229,7 +223,6 @@ textInput.addEventListener('keydown', (e) => {
 });
 
 sendBtn.addEventListener('click', sendMessage);
-
 attachBtn.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', (e) => {
@@ -263,12 +256,19 @@ removeImg.addEventListener('click', () => {
   updateSendButton();
 });
 
+// Connection status (Firestore connection)
+firebase.firestore().enableNetwork().then(() => {
+  statusDot.className = 'status-dot online';
+  statusText.textContent = 'Support Team Online';
+}).catch(() => {
+  statusDot.className = 'status-dot offline';
+  statusText.textContent = 'Offline';
+});
+
 // ====================== START ======================
 init();
 
-// Handle page unload
 window.addEventListener('beforeunload', () => {
-  if (userId) {
-    socket.emit('user:offline', userId);
-  }
+  goOffline();
+  if (unsubscribeMsgs) unsubscribeMsgs();
 });

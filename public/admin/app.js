@@ -1,21 +1,20 @@
-const BACKEND_URL = 'https://manage-chat.onrender.com';
+// ⚠️ Firebase config — ye bad me apna real config dalna
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
 
-const socket = io(BACKEND_URL || undefined, {
-  transports: ['websocket', 'polling']
-});
+firebase.initializeApp(firebaseConfig);
+const fdb = firebase.firestore();
+
 let selectedUserId = null;
 let users = [];
-let userMessages = {};
-
-function api(path) {
-  return BACKEND_URL + path;
-}
-
-function assetUrl(url) {
-  if (!url) return url;
-  if (url.startsWith('http')) return url;
-  return BACKEND_URL + url;
-}
+let unsubscribeUsers = null;
+let unsubscribeMsgs = null;
 
 // DOM refs
 const userListEl = document.getElementById('userList');
@@ -33,15 +32,21 @@ const backBtn = document.getElementById('backBtn');
 const userListPanel = document.getElementById('userListPanel');
 const chatPanel = document.getElementById('chatPanel');
 
-// ====================== LOAD USERS ======================
-async function loadUsers() {
-  try {
-    const res = await fetch(api('/api/users'));
-    users = await res.json();
-    renderUserList();
-  } catch (err) {
-    console.error('Failed to load users:', err);
-  }
+// ====================== SUBSCRIBE USERS ======================
+function subscribeUsers() {
+  if (unsubscribeUsers) unsubscribeUsers();
+
+  unsubscribeUsers = fdb.collection('users')
+    .orderBy('createdAt', 'desc')
+    .onSnapshot((snapshot) => {
+      users = [];
+      snapshot.forEach((doc) => {
+        users.push({ id: doc.id, ...doc.data() });
+      });
+      renderUserList(searchInput.value);
+    }, (err) => {
+      console.error('Users error:', err);
+    });
 }
 
 function renderUserList(filter = '') {
@@ -50,7 +55,7 @@ function renderUserList(filter = '') {
   const filtered = users.filter(u => {
     if (!filter) return true;
     const q = filter.toLowerCase();
-    return `#${u.id}`.includes(q) || `user ${u.id}`.includes(q);
+    return `#${u.userId}`.includes(q) || `user ${u.userId}`.includes(q);
   });
 
   if (filtered.length === 0) {
@@ -66,27 +71,24 @@ function renderUserList(filter = '') {
 
   sectionHeader.textContent = `All Users (${filtered.length})`;
 
-  filtered.forEach((u, idx) => {
+  filtered.forEach((u) => {
     const item = document.createElement('div');
     item.className = 'user-item';
-    item.dataset.userId = u.id;
+    item.dataset.userId = u.userId;
 
-    const initial = `#${u.id}`;
-    const lastMsg = u.last_message || 'No messages yet';
-    const lastActive = u.last_active ? formatTimeAgo(u.last_active) : '';
-    const isOnline = u.online === 1;
-
-    // Check if new user (has_sent_message === 0 but exists)
-    const isNew = u.has_sent_message === 0;
+    const lastMsg = u.lastMessage || 'No messages yet';
+    const lastActive = u.lastMessageAt ? formatTimeAgo(u.lastMessageAt.toDate()) : '';
+    const isOnline = u.online === true;
+    const isNew = !u.hasSentMessage;
 
     item.innerHTML = `
-      <div class="user-avatar" style="background: ${getAvatarColor(u.id)}">
-        ${u.id}
+      <div class="user-avatar" style="background: ${getAvatarColor(u.userId)}">
+        ${u.userId}
         <span class="online-indicator ${isOnline ? 'online' : 'offline'}"></span>
       </div>
       <div class="user-info">
         <div class="user-name">
-          User #${u.id}
+          User #${u.userId}
           ${isNew ? '<span class="badge new">NEW</span>' : ''}
         </div>
         <div class="user-preview">${lastMsg}</div>
@@ -94,7 +96,7 @@ function renderUserList(filter = '') {
       <div class="user-time">${lastActive}</div>
     `;
 
-    item.addEventListener('click', () => selectUser(u.id));
+    item.addEventListener('click', () => selectUser(u.userId));
     userListEl.appendChild(item);
   });
 }
@@ -104,11 +106,11 @@ function getAvatarColor(id) {
   return colors[(id - 1) % colors.length];
 }
 
-function formatTimeAgo(dateStr) {
+function formatTimeAgo(date) {
   try {
+    if (!date || !(date instanceof Date)) return '';
     const now = new Date();
-    const d = new Date(dateStr);
-    const diffMs = now - d;
+    const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
@@ -119,7 +121,7 @@ function formatTimeAgo(dateStr) {
     if (diffDays < 7) return `${diffDays}d ago`;
 
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${months[d.getMonth()]} ${d.getDate()}`;
+    return `${months[date.getMonth()]} ${date.getDate()}`;
   } catch {
     return '';
   }
@@ -128,9 +130,7 @@ function formatTimeAgo(dateStr) {
 // ====================== SELECT USER ======================
 async function selectUser(userId) {
   selectedUserId = userId;
-  socket.emit('admin:select_user', userId);
 
-  // Update UI
   noChatSelected.style.display = 'none';
   adminChatContainer.style.display = 'flex';
   adminChatContainer.style.flexDirection = 'column';
@@ -143,97 +143,70 @@ async function selectUser(userId) {
   chatPanel.classList.add('show');
   backBtn.classList.add('show');
 
-  // Update user item highlight
   document.querySelectorAll('.user-item').forEach(el => {
     el.style.background = parseInt(el.dataset.userId) === userId ? 'rgba(0, 122, 255, 0.08)' : '';
   });
 
-  // Load messages
-  await loadMessages(userId);
+  subscribeMessages(userId);
   adminTextInput.focus();
 }
 
-async function loadMessages(userId) {
-  try {
-    const res = await fetch(api(`/api/messages/${userId}`));
-    const messages = await res.json();
-    userMessages[userId] = messages;
-    renderMessages(messages);
-  } catch (err) {
-    console.error('Failed to load messages:', err);
-  }
-}
+// ====================== SUBSCRIBE MESSAGES ======================
+function subscribeMessages(userId) {
+  if (unsubscribeMsgs) unsubscribeMsgs();
 
-function renderMessages(messages) {
-  adminChatContainer.innerHTML = '';
+  adminChatContainer.innerHTML = '<div class="chat-empty">Loading messages...</div>';
 
-  if (!messages || messages.length === 0) {
-    adminChatContainer.innerHTML = '<div class="chat-empty">No messages yet. Send a welcome message!</div>';
-    scrollChatToBottom();
-    return;
-  }
+  unsubscribeMsgs = fdb.collection('messages')
+    .where('userId', '==', userId)
+    .orderBy('createdAt', 'asc')
+    .onSnapshot((snapshot) => {
+      adminChatContainer.innerHTML = '';
+      let hasMsgs = false;
 
-  messages.forEach(msg => {
-    const div = document.createElement('div');
-    div.className = `message ${msg.is_admin ? 'admin' : 'user'}`;
+      snapshot.forEach((doc) => {
+        hasMsgs = true;
+        addMessageToUI({ id: doc.id, ...doc.data() });
+      });
 
-    let content = '';
-    if (msg.image_url) {
-      content += `<img src="${assetUrl(msg.image_url)}" alt="image" loading="lazy">`;
-    }
-    if (msg.message) {
-      content += msg.message;
-    }
+      if (!hasMsgs) {
+        adminChatContainer.innerHTML = '<div class="chat-empty">No messages yet. Send a welcome message!</div>';
+      }
 
-    const time = msg.created_at ? formatTime(msg.created_at) : '';
-    div.innerHTML = `${content}<span class="time">${time}</span>`;
-    adminChatContainer.appendChild(div);
-  });
-
-  scrollChatToBottom();
+      scrollChatToBottom();
+    }, (err) => {
+      console.error('Messages error:', err);
+      adminChatContainer.innerHTML = '<div class="chat-empty">Error loading messages</div>';
+    });
 }
 
 function addMessageToUI(msg) {
-  if (msg.user_id !== selectedUserId) return;
-
-  if (noChatSelected.style.display !== 'none') {
-    noChatSelected.style.display = 'none';
-    adminChatContainer.style.display = 'flex';
-    adminChatContainer.style.flexDirection = 'column';
-    adminChatContainer.style.gap = '6px';
-  }
-
-  const empty = adminChatContainer.querySelector('.chat-empty');
-  if (empty) empty.remove();
-
   const div = document.createElement('div');
-  div.className = `message ${msg.is_admin ? 'admin' : 'user'}`;
+  div.className = `message ${msg.isAdmin ? 'admin' : 'user'}`;
 
   let content = '';
-  if (msg.image_url) {
-    content += `<img src="${assetUrl(msg.image_url)}" alt="image" loading="lazy">`;
+  if (msg.imageUrl) {
+    content += `<img src="${msg.imageUrl}" alt="image" loading="lazy">`;
   }
-  if (msg.message) {
-    content += msg.message;
+  if (msg.text) {
+    content += msg.text;
   }
 
-  const time = msg.created_at ? formatTime(msg.created_at) : '';
+  const time = msg.createdAt ? formatTime(msg.createdAt.toDate()) : '';
   div.innerHTML = `${content}<span class="time">${time}</span>`;
   adminChatContainer.appendChild(div);
-  scrollChatToBottom();
 }
 
-function formatTime(dateStr) {
+function formatTime(date) {
   try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    let hours = d.getHours();
-    const mins = d.getMinutes().toString().padStart(2, '0');
+    if (!date || !(date instanceof Date)) return '';
+    let hours = date.getHours();
+    const mins = date.getMinutes().toString().padStart(2, '0');
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12 || 12;
     return `${hours}:${mins} ${ampm}`;
   } catch {
-    return dateStr;
+    return '';
   }
 }
 
@@ -243,23 +216,27 @@ function scrollChatToBottom() {
   });
 }
 
-// ====================== ADMIN SEND MESSAGE ======================
+// ====================== ADMIN SEND ======================
 async function adminSendMessage() {
   const text = adminTextInput.value.trim();
   if (!text || !selectedUserId) return;
 
   adminSendBtn.disabled = true;
 
+  const msgData = {
+    userId: selectedUserId,
+    text: text,
+    imageUrl: null,
+    isAdmin: true,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
   try {
-    await fetch(api('/api/message'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: selectedUserId,
-        message: text,
-        imageUrl: null,
-        isAdmin: true,
-      }),
+    await fdb.collection('messages').add(msgData);
+
+    await fdb.collection('users').doc(selectedUserId.toString()).update({
+      lastMessage: text,
+      lastMessageAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
     adminTextInput.value = '';
@@ -270,33 +247,6 @@ async function adminSendMessage() {
     adminSendBtn.disabled = false;
   }
 }
-
-// ====================== SOCKET EVENTS ======================
-socket.on('message:new', (msg) => {
-  // Update user list if needed
-  const userIdx = users.findIndex(u => u.id === msg.user_id);
-  if (userIdx !== -1) {
-    users[userIdx].last_message = msg.message || '[Image]';
-    users[userIdx].last_active = msg.created_at;
-    // Move to top
-    const user = users.splice(userIdx, 1)[0];
-    users.unshift(user);
-    renderUserList(searchInput.value);
-  }
-
-  // Add to chat if selected
-  if (selectedUserId === msg.user_id) {
-    addMessageToUI(msg);
-  }
-});
-
-socket.on('user:status', (data) => {
-  const user = users.find(u => u.id === data.userId);
-  if (user) {
-    user.online = data.online;
-    renderUserList(searchInput.value);
-  }
-});
 
 // ====================== UI EVENTS ======================
 searchInput.addEventListener('input', () => {
@@ -329,13 +279,8 @@ backBtn.addEventListener('click', () => {
   navTitle.textContent = 'Users';
   navRight.textContent = '';
   selectedUserId = null;
+  if (unsubscribeMsgs) unsubscribeMsgs();
 });
 
-// ====================== POLLING ======================
-// Poll for user list updates every 5 seconds
-setInterval(loadUsers, 5000);
-
 // ====================== INIT ======================
-loadUsers();
-
-
+subscribeUsers();

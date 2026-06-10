@@ -1,5 +1,4 @@
 node_modules/
-chat.db
-backend/uploads/*
-!backend/uploads/.gitkeep
 .env
+.firebase/
+*.log
