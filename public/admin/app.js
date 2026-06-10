@@ -33,8 +33,6 @@ const backBtn = document.getElementById('backBtn');
 const userListPanel = document.getElementById('userListPanel');
 const chatPanel = document.getElementById('chatPanel');
 
-const isMobile = () => window.innerWidth < 768;
-
 // ====================== LOAD USERS ======================
 async function loadUsers() {
   try {
@@ -141,12 +139,9 @@ async function selectUser(userId) {
   navTitle.textContent = `User #${userId}`;
   navRight.textContent = `#${userId}`;
 
-  // Mobile navigation
-  if (isMobile()) {
-    userListPanel.classList.add('hidden');
-    chatPanel.classList.add('show');
-    backBtn.classList.add('show');
-  }
+  userListPanel.classList.add('hidden');
+  chatPanel.classList.add('show');
+  backBtn.classList.add('show');
 
   // Update user item highlight
   document.querySelectorAll('.user-item').forEach(el => {
@@ -343,11 +338,4 @@ setInterval(loadUsers, 5000);
 // ====================== INIT ======================
 loadUsers();
 
-// Handle window resize
-window.addEventListener('resize', () => {
-  if (!isMobile()) {
-    userListPanel.classList.remove('hidden');
-    chatPanel.classList.add('show');
-    backBtn.classList.remove('show');
-  }
-});
+

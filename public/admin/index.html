@@ -432,39 +432,9 @@
       border-radius: 4px;
     }
 
-    /* ==================== RESPONSIVE ==================== */
-    @media (min-width: 768px) {
-      .user-list-panel {
-        width: 340px;
-        border-right: 0.5px solid var(--ios-separator);
-      }
-
-      .user-list-panel.hidden {
-        display: flex;
-        flex-direction: column;
-      }
-
-      .chat-panel {
-        display: flex;
-      }
-
-      .nav-back {
-        display: none !important;
-      }
-    }
-
-    @media (max-width: 767px) {
-      .user-list-panel.hidden {
-        display: none;
-      }
-
-      .chat-panel.show {
-        display: flex;
-      }
-
-      .chat-panel:not(.show) {
-        display: none;
-      }
+    /* Mobile-only: single view */
+    .user-list-panel.hidden {
+      display: none;
     }
   </style>
 </head>
