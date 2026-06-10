@@ -1,11 +1,10 @@
-// ⚠️ Firebase config — apna real config yaha dalna
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBNzgygZVvV1QuOcPIXgfSCmP3D0xs37LU",
+  authDomain: "chat-data-3233b.firebaseapp.com",
+  projectId: "chat-data-3233b",
+  storageBucket: "chat-data-3233b.firebasestorage.app",
+  messagingSenderId: "781730752698",
+  appId: "1:781730752698:web:0df5196d94f9c2d9367a83"
 };
 
 // ⚠️ Telegram config — apna bot token aur channel IDs yaha dalna
